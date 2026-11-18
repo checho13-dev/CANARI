@@ -206,6 +206,27 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.request("/api/readings?limit=10001",self.keys["operator"])[0],400)
         self.assertEqual(self.request("/api/readings?node_id=N99",self.keys["operator"])[0],400)
 
+    def test_read_only_simulation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "demo.sqlite3", load_config(ROOT / "config.json"))
+            server = create_server(store, self.keys, port=0, public_simulation=True)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                with urlopen(base + "/health") as response:
+                    self.assertTrue(json.load(response)["public_simulation"])
+                with urlopen(base + "/api/status") as response:
+                    self.assertEqual(len(json.load(response)["nodes"]), 3)
+                for route in ("/api/events/1/ack", "/api/telemetry"):
+                    with self.assertRaises(HTTPError) as raised:
+                        urlopen(Request(base + route, method="POST"))
+                    self.assertEqual(raised.exception.code, 403)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join()
+
     def test_private_files_not_served(self):
         for path in ["/config.json","/data/operator.key","/../core.py"]:
             self.assertNotEqual(self.request(path)[0],200)

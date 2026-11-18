@@ -1,8 +1,27 @@
-# CANARI
+# CANARI · Centro de operaciones ambientales
 
-Prototipo académico ejecutable de monitoreo ambiental. Incluye servidor Python,
-base de datos SQLite, panel web, reglas de alertas por nodo, historial, exportación
-CSV, simulador y pruebas reproducibles. No requiere instalar paquetes de pip.
+**Sergio Esteban Bello Gómez** · Coautor de CANARI junto a [@santy19s25e](https://github.com/santy19s25e). [Repositorio de origen](https://github.com/santy19s25e/CANARI)
+
+Consola de laboratorio para investigar cambios de metano, oxígeno, temperatura y humedad en un prototipo de monitoreo para minería subterránea. Desde una alerta puedes identificar el nodo, revisar el motivo y consultar la serie de lecturas que la explica.
+
+![Vista general de CANARI con tres nodos simulados y sus estados](docs/capturas/operaciones.jpg)
+
+**Tecnologías** · Python 3.10+, SQLite, JavaScript, HTML y CSS. La demo se ejecuta con la biblioteca estándar de Python.
+
+[Ejecutar la demo](#explorar-el-centro-de-operaciones) · [Ver el análisis de lecturas](docs/capturas/analisis.jpg) · [Ver el registro de eventos](docs/capturas/eventos.jpg)
+
+## Explorar el centro de operaciones
+
+Con Python 3.10 o superior, abre **VER_DEMO_WINDOWS.bat** y visita la dirección
+que aparece en la consola (por defecto http://127.0.0.1:8000). En macOS o Linux
+ejecuta `python3 server.py --vista-demo`. El servidor genera lecturas simuladas
+en una base temporal independiente. La vista permite analizar nodos, consultar
+eventos y descargar CSV. El reconocimiento de eventos requiere la sesión de
+operador descrita abajo. Al cerrar la demo se descartan sus lecturas.
+
+En **Vista general**, usa **Analizar nodo** para abrir su serie. **Análisis de
+lecturas** agrupa tendencias e histórico. **Registro de eventos** reúne los
+filtros y la bandeja de reconocimientos. La guía explica cada estado.
 
 ## Inicio en Windows
 
@@ -21,6 +40,18 @@ py -3 server.py --demo
 
 En macOS o Linux usa `python3 server.py --demo`. Si Windows no reconoce `py`,
 prueba `python server.py --demo` después de instalar Python y volver a abrir la terminal.
+
+## Panel de operador
+
+El menú principal abre las vistas de operación, análisis, eventos y ayuda.
+Selecciona un nodo, un periodo y una variable para revisar el gráfico. El resumen
+muestra el mínimo, el máximo y el número de mediciones válidas de la serie visible
+(hasta 100 muestras). Los periodos se calculan con la hora del servidor.
+
+La tabla muestra hasta 25 lecturas. **Exportar CSV** descarga hasta 10 000 lecturas
+del mismo nodo y periodo con todas las variables. En eventos puedes filtrar los
+últimos 100 registros por alarmas, fallos o pendientes de lectura. El filtro es
+visual y no afecta las notificaciones sonoras ni el reconocimiento.
 
 ## Qué está implementado
 

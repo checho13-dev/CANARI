@@ -6,6 +6,7 @@ import os
 import secrets
 import threading
 import time
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -30,7 +31,7 @@ def read_keys(data_dir):
     return keys
 
 
-def create_server(store, keys, host="127.0.0.1", port=8000):
+def create_server(store, keys, host="127.0.0.1", port=8000, *, public_simulation=False):
     class Handler(BaseHTTPRequestHandler):
         server_version = "CanariLab/1.0"
 
@@ -87,8 +88,9 @@ def create_server(store, keys, host="127.0.0.1", port=8000):
                     suffix = {"/": "text/html", "/app.js": "text/javascript", "/style.css": "text/css"}[url.path]
                     return self.send(200, (ROOT / "web" / public[url.path]).read_bytes(), suffix + "; charset=utf-8")
                 if url.path == "/health":
-                    return self.send(200, {"service": "CANARI", "mode": "laboratory"})
-                self.authenticate("operator")
+                    return self.send(200, {"service": "CANARI", "mode": "laboratory", "public_simulation": public_simulation})
+                if not public_simulation:
+                    self.authenticate("operator")
                 q = parse_qs(url.query)
                 if url.path == "/api/status":
                     return self.send(200, store.snapshot())
@@ -132,6 +134,8 @@ def create_server(store, keys, host="127.0.0.1", port=8000):
 
         def do_POST(self):
             try:
+                if public_simulation:
+                    raise InputError("La demostración es de solo lectura", 403)
                 path = urlsplit(self.path).path
                 if path == "/api/telemetry":
                     self.authenticate("ingest")
@@ -163,11 +167,16 @@ def main():
     parser.add_argument("--config", type=Path, default=ROOT / "config.json")
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data")
     parser.add_argument("--demo", action="store_true", help="Generar datos simulados cada 3 segundos")
+    parser.add_argument("--vista-demo", action="store_true", help="Abrir una simulación de solo lectura con almacenamiento temporal")
     args = parser.parse_args()
+    simulation_dir = tempfile.TemporaryDirectory(prefix="canari-demo-") if args.vista_demo else None
+    if simulation_dir:
+        args.data_dir = Path(simulation_dir.name)
+        args.demo = True
     cfg = load_config(args.config)
     store = Store(args.data_dir / "canari.sqlite3", cfg)
     keys = read_keys(args.data_dir)
-    server = create_server(store, keys, args.host, args.port)
+    server = create_server(store, keys, args.host, args.port, public_simulation=args.vista_demo)
     stop = threading.Event()
     def monitor():
         while not stop.is_set():
@@ -176,12 +185,15 @@ def main():
             except Exception as exc:
                 print("No se pudo registrar el estado:", type(exc).__name__, flush=True)
             stop.wait(1)
-    threading.Thread(target=monitor, daemon=True).start()
+    workers = [threading.Thread(target=monitor, daemon=True)]
     if args.demo:
         from simulator import demo_loop
-        threading.Thread(target=demo_loop, args=(store, stop), daemon=True).start()
+        workers.append(threading.Thread(target=demo_loop, args=(store, stop), daemon=True))
+    for worker in workers:
+        worker.start()
     print(f"CANARI laboratorio: http://{args.host}:{args.port}", flush=True)
-    print("Clave de operador (pegar en el panel):", keys["operator"], flush=True)
+    if not args.vista_demo:
+        print("Clave de operador (pegar en el panel):", keys["operator"], flush=True)
     print("Claves guardadas en:", args.data_dir.resolve(), flush=True)
     print("Datos simulados. No utilizar para decisiones de seguridad minera.", flush=True)
     try:
@@ -191,6 +203,10 @@ def main():
     finally:
         stop.set()
         server.server_close()
+        for worker in workers:
+            worker.join()
+        if simulation_dir:
+            simulation_dir.cleanup()
 
 
 if __name__ == "__main__":
